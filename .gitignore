@@ -1,0 +1,6 @@
+venv/
+train.de
+train.en
+val.en
+val.de
+train_de_en_bpe
