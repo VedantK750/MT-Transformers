@@ -7,6 +7,7 @@ import torch.optim as optim
 from model import Transformer
 import torch.nn as nn
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 
 en_file = "/home/vedant/machine_translation_using_transformers_from_scratch/train.en"
@@ -91,7 +92,12 @@ def train_epoch(epoch):
 
     progress_bar = tqdm(training_loader, desc=f"Epoch {epoch+1}")
 
-    for batch in progress_bar:
+    # interactive plot while training 
+    plt.ion()                      
+    fig, ax = plt.subplots()
+    losses = []
+
+    for step, batch in enumerate(progress_bar):
         src = batch["src"].to(DEVICE)
         dec_in = batch["decoder_input"].to(DEVICE)
         dec_out = batch["decoder_target"].to(DEVICE)
@@ -114,8 +120,21 @@ def train_epoch(epoch):
         loss.backward()
         optimizer.step()
 
-        total_loss += loss.item()
+        loss_value = loss.item()
+        total_loss += loss_value
+        losses.append(loss_value)
+
         progress_bar.set_postfix(loss=loss.item())  # this takes in a dictionary to be displayed 
+        if step % 20 == 0:
+            ax.clear()
+            ax.plot(losses)
+            ax.set_xlabel("Batch Step")
+            ax.set_ylabel("Loss")
+            ax.set_title(f"Epoch {epoch+1} Running Loss")
+            plt.pause(0.01)
+        
+        plt.ioff()                
+        plt.show()
 
     return total_loss/len(training_loader)  # length of the training loader is the number of batches in 1 epoch 
 
@@ -149,7 +168,7 @@ def bleu_score_val():
 
     pass
 
-
+best_val_loss = float("inf")
 for epoch in range(NUM_EPOCHS):
     # train phase
     model.train()
@@ -160,8 +179,12 @@ for epoch in range(NUM_EPOCHS):
     model.eval()
     with torch.no_grad():
         # NOTE: even during validation we are doing teacher forcing for calculating the VAL LOSS
-        avg_loss = validater()
-    print(f"Epoch {epoch+1} avg VAL loss: {avg_loss:.4f}")
+        val_loss = validater()
+    print(f"Epoch {epoch+1} avg VAL loss: {val_loss:.4f}")
+    if best_val_loss > val_loss:
+        best_val_loss = val_loss
+        torch.save(model.state_dict(), "best_model.pt")
+        print("Saved new best model.")
 
 
 
