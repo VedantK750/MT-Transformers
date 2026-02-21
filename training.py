@@ -8,10 +8,11 @@ from model import Transformer
 import torch.nn as nn
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+from early_stop import EarlyStopping
 
 
-en_file = "/home/vedant/machine_translation_using_transformers_from_scratch/train.en"
-de_file = "/home/vedant/machine_translation_using_transformers_from_scratch/train.de"
+en_file = "train.en"
+de_file = "train.de"
 
 en_val = "val.en"
 de_val = "val.de"
@@ -19,11 +20,12 @@ de_val = "val.de"
 sp = spm.SentencePieceProcessor()
 sp.load("mt_bpe.model")
 
+early_stopping = EarlyStopping(verbose=True)
 
 BATCH_SIZE = 32
 NUM_WORKERS = 8
 NUM_EPOCHS = 50
-DEVICE = "cpu"
+DEVICE = "cuda"
 b1 = 0.9
 b2 = 0.98
 epsilon = 1e-09
@@ -41,6 +43,7 @@ src_vocab_size = sp.get_piece_size()
 tgt_vocab_size = sp.get_piece_size()
 ##########################################
 
+print(f"Using device: {DEVICE}")
 
 def custom_collate(batch,pad_id):
     src_batch = [item["src"] for item in batch]
@@ -72,7 +75,7 @@ validation_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False
                         num_workers=NUM_WORKERS, pin_memory=True, drop_last=False)
 
 
-model = Transformer(N,d_model,d_ff,n_heads,dropout_rate,MAX_LEN,src_vocab_size,tgt_vocab_size)
+model = Transformer(N,d_model,d_ff,n_heads,dropout_rate,MAX_LEN,src_vocab_size,tgt_vocab_size).to(DEVICE)
 
 # step is just a number 
 # and calling scheduler.step() just incrememnts this step counter 
@@ -93,8 +96,8 @@ def train_epoch(epoch):
     progress_bar = tqdm(training_loader, desc=f"Epoch {epoch+1}")
 
     # interactive plot while training 
-    plt.ion()                      
-    fig, ax = plt.subplots()
+    # plt.ion()                      
+    # fig, ax = plt.subplots()
     losses = []
 
     for step, batch in enumerate(progress_bar):
@@ -125,16 +128,16 @@ def train_epoch(epoch):
         losses.append(loss_value)
 
         progress_bar.set_postfix(loss=loss.item())  # this takes in a dictionary to be displayed 
-        if step % 20 == 0:
-            ax.clear()
-            ax.plot(losses)
-            ax.set_xlabel("Batch Step")
-            ax.set_ylabel("Loss")
-            ax.set_title(f"Epoch {epoch+1} Running Loss")
-            plt.pause(0.01)
+        # if step % 20 == 0:
+        #     ax.clear()
+        #     ax.plot(losses)
+        #     ax.set_xlabel("Batch Step")
+        #     ax.set_ylabel("Loss")
+        #     ax.set_title(f"Epoch {epoch+1} Running Loss")
+        #     plt.pause(0.01)
         
-        plt.ioff()                
-        plt.show()
+        # plt.ioff()                
+        # plt.show()
 
     return total_loss/len(training_loader)  # length of the training loader is the number of batches in 1 epoch 
 
@@ -146,8 +149,8 @@ def validater():
         dec_in = batch["decoder_input"].to(DEVICE)
         dec_out = batch["decoder_target"].to(DEVICE)
 
-        src_key_padding_mask = (src == pad_id)
-        tgt_key_padding_mask = (dec_in == pad_id)
+        src_key_padding_mask = (src == pad_id).to(DEVICE)
+        tgt_key_padding_mask = (dec_in == pad_id).to(DEVICE)
         seq_len = dec_in.size(1)
         attn_mask = torch.triu(torch.ones(seq_len,seq_len), diagonal=1).bool()
         attn_mask = attn_mask.to(src.device)  # push attn_mask to DEVICE
@@ -185,6 +188,12 @@ for epoch in range(NUM_EPOCHS):
         best_val_loss = val_loss
         torch.save(model.state_dict(), "best_model.pt")
         print("Saved new best model.")
+     
+    early_stopping.check_early_stop(val_loss)
+    
+    if early_stopping.stop_training:
+        print(f"Early stopping at epoch {epoch}")
+        break
 
 
 

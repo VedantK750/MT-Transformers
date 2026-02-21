@@ -240,10 +240,11 @@ class PosistionalEncoding(nn.Module):
         self.dropout = nn.Dropout(p=dropout)
         posistion = torch.arange(max_len).unsqueeze(1)  # shape : [max_len,1]
         div_term = torch.exp(torch.arange(0,d_model,2) * (-math.log(10000.0)/d_model))   # evaluates same to 1/10000^(2i/d_model)  shape : [d_model/2]
-        self.pe = torch.zeros(1,max_len,d_model)
-        self.pe[0,:,0::2] = torch.sin(posistion*div_term)   # shape after broadcasting : [max_len, d_model/2]
-        self.pe[0,:,1::2] = torch.cos(posistion*div_term)   # shape after broadcasting : [max_len, d_model/2]
-
+        pe = torch.zeros(1,max_len,d_model)
+        pe[0,:,0::2] = torch.sin(posistion*div_term)   # shape after broadcasting : [max_len, d_model/2]
+        pe[0,:,1::2] = torch.cos(posistion*div_term)   # shape after broadcasting : [max_len, d_model/2]
+        self.register_buffer("pe", pe)  #
+        
     def forward(self,x):   # shape of x [batch_size, seq_len, d_model]   
         x = x + self.pe[:,:x.size(1)]     # first slicing then broadcasting to [batch_size, seq_len, d_model]  (only require seq_len out of max_len)
         return self.dropout(x)
